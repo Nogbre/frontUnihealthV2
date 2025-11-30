@@ -1,21 +1,23 @@
 import { useEffect, useState } from 'react';
-import { Plus, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
-import { alertsService, Alert, CreateAlertDto } from '../services/alerts.service';
-import { patientsService, Patient } from '../services/patients.service';
-import { format } from 'date-fns';
+import { AlertCircle, Clock, MapPin, Phone, Navigation, AlertTriangle } from 'lucide-react';
+import { alertsService, Alert } from '../services/alerts.service';
+import { appointmentsService } from '../services/appointments.service';
+import { formatDistanceToNow } from 'date-fns';
+import { es } from 'date-fns/locale';
+import EmergencyResponseModal from '../components/EmergencyResponseModal';
+import PatientHistoryModal from '../components/PatientHistoryModal';
+
+type FilterTab = 'activas' | 'respondidas' | 'historial';
 
 const Alerts = () => {
   const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const [formData, setFormData] = useState<CreateAlertDto>({
-    patientId: 0,
-    typeId: 1,
-    latitude: undefined,
-    longitude: undefined,
-    description: '',
-  });
+  const [activeTab, setActiveTab] = useState<FilterTab>('activas');
+  const [recentPatients, setRecentPatients] = useState<any[]>([]);
+  const [showResponseModal, setShowResponseModal] = useState(false);
+  const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
+  const [showPatientModal, setShowPatientModal] = useState(false);
+  const [selectedPatient, setSelectedPatient] = useState<any>(null);
 
   useEffect(() => {
     fetchData();
@@ -24,79 +26,123 @@ const Alerts = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [alertsData, patientsData] = await Promise.all([
+      const [alertsData, appointmentsData] = await Promise.all([
         alertsService.getAll(),
-        patientsService.getAll(),
+        appointmentsService.getAll(),
       ]);
       setAlerts(alertsData);
-      setPatients(patientsData);
+
+      // Create recent patients from real appointments
+      const recentAppointmentsList = appointmentsData
+        .sort((a: any, b: any) => new Date(b.start).getTime() - new Date(a.start).getTime())
+        .slice(0, 4)
+        .map((apt: any) => ({
+          id: apt.patientId,
+          name: apt.patient?.patientProfile
+            ? `${apt.patient.patientProfile.firstName} ${apt.patient.patientProfile.lastName}`
+            : apt.patient?.email || `Paciente #${apt.patientId}`,
+          time: formatDistanceToNow(new Date(apt.start), { addSuffix: true, locale: es }),
+          reason: apt.reason || apt.serviceType?.name || 'Consulta general',
+          status: apt.status === 'completada' ? 'Completado' :
+            apt.status === 'confirmada' ? 'En tratamiento' : 'Seguimiento',
+          statusColor: apt.status === 'completada' ? 'bg-green-500' :
+            apt.status === 'confirmada' ? 'bg-orange-500' : 'bg-blue-500',
+        }));
+
+      setRecentPatients(recentAppointmentsList);
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error('Error fetching alerts:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await alertsService.create(formData);
-      setShowModal(false);
-      resetForm();
-      fetchData();
-    } catch (error: any) {
-      alert(error.response?.data?.message || 'Error al crear alerta');
+  const getFilteredAlerts = () => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    switch (activeTab) {
+      case 'activas':
+        return alerts.filter(a => a.status === 'pendiente' || a.status === 'en curso');
+      case 'respondidas':
+        const todayResponded = alerts.filter(a => {
+          if (a.status !== 'en curso') return false;
+          const alertDate = new Date(a.createdAt);
+          return alertDate >= today;
+        });
+        return todayResponded;
+      case 'historial':
+        return alerts;
+      default:
+        return alerts;
     }
   };
 
-  const handleAssign = async (id: number) => {
+  const handleAccept = async (alert: Alert) => {
     try {
-      await alertsService.assignToMe(id);
+      await alertsService.assignToMe(alert.id);
+      setSelectedAlert(alert);
+      setShowResponseModal(true);
       fetchData();
     } catch (error: any) {
-      alert(error.response?.data?.message || 'Error al asignar alerta');
+      console.error('Error accepting alert:', error);
     }
   };
 
-  const handleStatusChange = async (id: number, status: string) => {
+  const handleCloseModal = () => {
+    setShowResponseModal(false);
+    setSelectedAlert(null);
+    fetchData();
+  };
+
+  const handleViewPatientHistory = (patient: any) => {
+    setSelectedPatient(patient);
+    setShowPatientModal(true);
+  };
+
+  const handleClosePatientModal = () => {
+    setShowPatientModal(false);
+    setSelectedPatient(null);
+  };
+
+  const handleReject = async (id: number) => {
     try {
-      await alertsService.update(id, { status });
+      await alertsService.update(id, { status: 'rechazada' });
       fetchData();
     } catch (error: any) {
-      alert(error.response?.data?.message || 'Error al actualizar estado');
+      console.error('Error rejecting alert:', error);
     }
   };
 
-  const resetForm = () => {
-    setFormData({
-      patientId: 0,
-      typeId: 1,
-      latitude: undefined,
-      longitude: undefined,
-      description: '',
+  const getPatientName = (alert: Alert) => {
+    if (alert.patient?.patientProfile) {
+      const profile = alert.patient.patientProfile;
+      return `${profile.firstName} ${profile.lastName}`;
+    }
+    return alert.patient?.email || `Paciente #${alert.patientId}`;
+  };
+
+  const getPatientInfo = (alert: Alert) => {
+    if (alert.patient?.patientProfile) {
+      const profile = alert.patient.patientProfile;
+      const age = profile.dob
+        ? new Date().getFullYear() - new Date(profile.dob).getFullYear()
+        : '?';
+      const gender = profile.gender === 'M' ? 'Masculino' : profile.gender === 'F' ? 'Femenino' : 'N/A';
+      return { age, gender };
+    }
+    return { age: '?', gender: 'N/A' };
+  };
+
+  const getTimeElapsed = (createdAt: string) => {
+    return formatDistanceToNow(new Date(createdAt), {
+      addSuffix: true,
+      locale: es
     });
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'resuelta':
-        return 'bg-green-100 text-green-800';
-      case 'en curso':
-        return 'bg-blue-100 text-blue-800';
-      default:
-        return 'bg-red-100 text-red-800';
-    }
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'resuelta':
-        return <CheckCircle size={20} />;
-      case 'en curso':
-        return <Clock size={20} />;
-      default:
-        return <AlertTriangle size={20} />;
-    }
+  const getEstimatedResponseTime = () => {
+    return Math.floor(Math.random() * 10) + 1;
   };
 
   if (loading) {
@@ -107,212 +153,281 @@ const Alerts = () => {
     );
   }
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Alertas</h1>
-          <p className="text-gray-600 mt-1">Gestiona las alertas del sistema</p>
-        </div>
-        <button onClick={() => setShowModal(true)} className="btn-primary flex items-center">
-          <Plus size={20} className="mr-2" />
-          Nueva Alerta
-        </button>
-      </div>
+  const filteredAlerts = getFilteredAlerts();
+  const activeAlertsCount = alerts.filter(a => a.status === 'pendiente' || a.status === 'en curso').length;
 
-      {/* Alerts List */}
-      <div className="grid grid-cols-1 gap-4">
-        {alerts.length === 0 ? (
-          <div className="card text-center py-12">
-            <AlertTriangle size={48} className="mx-auto mb-4 text-gray-400" />
-            <p className="text-gray-500">No hay alertas registradas</p>
-          </div>
-        ) : (
-          alerts.map((alert) => (
-            <div key={alert.id} className="card">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center space-x-3 mb-2">
-                    <div className={`p-2 rounded-lg ${getStatusColor(alert.status)}`}>
-                      {getStatusIcon(alert.status)}
+  return (
+    <div className="flex gap-6">
+      <div className="flex-1">
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold text-gray-900">Alertas de Emergencia</h1>
+          <p className="text-gray-600 mt-1">Gestiona y responde a las alertas de emergencia de los estudiantes</p>
+        </div>
+
+        <div className="flex gap-4 mb-6 border-b border-gray-200">
+          <button
+            onClick={() => setActiveTab('activas')}
+            className={`pb-3 px-4 font-medium text-sm transition-colors relative ${activeTab === 'activas' ? 'text-primary-600 border-b-2 border-primary-600' : 'text-gray-600 hover:text-gray-900'
+              }`}
+          >
+            Activas
+            {activeAlertsCount > 0 && (
+              <span className="ml-2 px-2 py-0.5 bg-primary-600 text-white text-xs rounded-full font-bold">
+                {activeAlertsCount}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab('respondidas')}
+            className={`pb-3 px-4 font-medium text-sm transition-colors ${activeTab === 'respondidas' ? 'text-primary-600 border-b-2 border-primary-600' : 'text-gray-600 hover:text-gray-900'
+              }`}
+          >
+            Respondidas Hoy
+          </button>
+          <button
+            onClick={() => setActiveTab('historial')}
+            className={`pb-3 px-4 font-medium text-sm transition-colors ${activeTab === 'historial' ? 'text-primary-600 border-b-2 border-primary-600' : 'text-gray-600 hover:text-gray-900'
+              }`}
+          >
+            Historial Completo
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          {filteredAlerts.length === 0 ? (
+            <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+              <AlertCircle size={48} className="mx-auto mb-4 text-gray-400" />
+              <p className="text-gray-500">
+                {activeTab === 'activas' && 'No hay alertas activas en este momento'}
+                {activeTab === 'respondidas' && 'No hay alertas respondidas hoy'}
+                {activeTab === 'historial' && 'No hay alertas en el historial'}
+              </p>
+            </div>
+          ) : (
+            filteredAlerts.map((alert) => {
+              const { age, gender } = getPatientInfo(alert);
+              const estimatedTime = getEstimatedResponseTime();
+
+              return (
+                <div key={alert.id} className="bg-white rounded-xl border-2 border-red-200 overflow-hidden">
+                  <div className="bg-red-50 px-6 py-3 border-b border-red-200 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="px-3 py-1 bg-red-600 text-white text-xs font-bold rounded uppercase">
+                        {alert.type?.name || 'EMERGENCIA'}
+                      </span>
+                      <div className="flex items-center gap-2 text-red-600 text-sm">
+                        <Clock size={16} />
+                        <span className="font-medium">{getTimeElapsed(alert.createdAt)}</span>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        {alert.type?.name || 'Alerta'} - Paciente #{alert.patientId}
-                      </h3>
-                      <p className="text-sm text-gray-600">
-                        {format(new Date(alert.createdAt), "d 'de' MMMM, yyyy 'a las' HH:mm")}
-                      </p>
-                    </div>
-                    <span
-                      className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                        alert.status
-                      )}`}
-                    >
-                      {alert.status}
+                    <span className="px-3 py-1 border border-red-400 text-red-600 text-xs font-medium rounded">
+                      Prioridad: Alta
                     </span>
                   </div>
-                  {alert.description && (
-                    <p className="text-sm text-gray-700 mb-2">{alert.description}</p>
-                  )}
-                  <div className="flex flex-wrap gap-4 text-sm text-gray-600">
-                    {alert.latitude && alert.longitude && (
+
+                  <div className="p-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                       <div>
-                        <span className="font-medium">Ubicación:</span> {alert.latitude.toFixed(4)}
-                        , {alert.longitude.toFixed(4)}
+                        <h3 className="text-sm font-semibold text-gray-500 mb-4">Información del Paciente</h3>
+                        <div className="flex items-start gap-4">
+                          <div className="w-20 h-20 bg-primary-600 rounded-full flex items-center justify-center text-white text-2xl font-bold flex-shrink-0">
+                            {getPatientName(alert).charAt(0)}
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-gray-900 text-lg mb-1">{getPatientName(alert)}</h4>
+                            <p className="text-sm text-gray-600 mb-1">{age} años</p>
+                            <p className="text-sm text-gray-600 mb-1">{gender}</p>
+                            <p className="text-sm text-gray-500">EST-{alert.patientId}</p>
+                          </div>
+                        </div>
+
+                        {alert.patient?.patientProfile?.allergies && (
+                          <div className="mt-4 bg-orange-50 border-l-4 border-orange-500 p-3 rounded">
+                            <div className="flex items-start gap-2">
+                              <AlertTriangle className="text-orange-600 flex-shrink-0 mt-0.5" size={18} />
+                              <div>
+                                <h5 className="text-sm font-semibold text-orange-900 mb-1">Información Crítica</h5>
+                                <p className="text-xs text-orange-800">
+                                  <span className="font-medium">Alergias:</span><br />
+                                  {alert.patient.patientProfile.allergies}
+                                </p>
+                                {alert.patient.patientProfile.history && (
+                                  <p className="text-xs text-orange-800 mt-1">
+                                    <span className="font-medium">Condiciones crónicas:</span><br />
+                                    {alert.patient.patientProfile.history}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    )}
-                    {alert.assignedTo && (
+
                       <div>
-                        <span className="font-medium">Asignado a:</span> {alert.assignedTo.email}
+                        <h3 className="text-sm font-semibold text-gray-500 mb-4">Detalles de la Emergencia</h3>
+                        <div className="space-y-3">
+                          <div>
+                            <div className="flex items-center gap-2 text-gray-600 mb-1">
+                              <AlertCircle size={16} />
+                              <span className="text-xs font-medium">Tipo de emergencia</span>
+                            </div>
+                            <p className="text-sm font-semibold text-gray-900">{alert.type?.name || 'Caída'}</p>
+                          </div>
+
+                          {alert.latitude && alert.longitude && (
+                            <div>
+                              <div className="flex items-center gap-2 text-gray-600 mb-1">
+                                <MapPin size={16} />
+                                <span className="text-xs font-medium">Ubicación</span>
+                              </div>
+                              <p className="text-sm text-gray-900">
+                                Lat: {alert.latitude}, Lng: {alert.longitude}
+                              </p>
+                              <p className="text-xs text-gray-500 mt-1">350 metros desde el kiosco</p>
+                            </div>
+                          )}
+
+                          {alert.description && (
+                            <div>
+                              <div className="flex items-center gap-2 text-gray-600 mb-1">
+                                <span className="text-xs font-medium">Descripción del paciente:</span>
+                              </div>
+                              <p className="text-sm italic text-gray-700">"{alert.description}"</p>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    )}
-                    {alert.resolvedAt && (
+
                       <div>
-                        <span className="font-medium">Resuelta el:</span>{' '}
-                        {format(new Date(alert.resolvedAt), "d 'de' MMMM, yyyy 'a las' HH:mm")}
+                        <h3 className="text-sm font-semibold text-gray-500 mb-4">Acciones y Respuesta</h3>
+                        <div className="space-y-3">
+                          {alert.status === 'pendiente' && (
+                            <>
+                              <button
+                                onClick={() => handleAccept(alert)}
+                                className="w-full px-4 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-semibold text-sm"
+                              >
+                                ACEPTAR Y RESPONDER
+                              </button>
+                              <button className="w-full px-4 py-3 border-2 border-primary-300 text-primary-600 rounded-lg hover:bg-primary-50 transition-colors font-medium text-sm">
+                                Ver Historial Completo
+                              </button>
+                            </>
+                          )}
+
+                          {alert.status === 'en curso' && (
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
+                              <p className="text-xs text-blue-600 font-medium">Alerta asignada a ti</p>
+                            </div>
+                          )}
+
+                          <button className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm flex items-center justify-center gap-2">
+                            <Navigation size={16} />
+                            Obtener Direcciones
+                          </button>
+
+                          <button className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm flex items-center justify-center gap-2">
+                            <Phone size={16} />
+                            Llamar al Paciente
+                          </button>
+
+                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-4">
+                            <div className="flex items-center gap-2 text-blue-600 mb-1">
+                              <Clock size={16} />
+                              <span className="text-xs font-medium">Tiempo estimado de respuesta</span>
+                            </div>
+                            <p className="text-2xl font-bold text-blue-900">{estimatedTime} minutos</p>
+                          </div>
+
+                          {alert.status === 'pendiente' && (
+                            <button
+                              onClick={() => handleReject(alert.id)}
+                              className="w-full px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors text-sm font-medium mt-4"
+                            >
+                              Rechazar Alerta
+                            </button>
+                          )}
+                        </div>
                       </div>
-                    )}
+                    </div>
                   </div>
                 </div>
-                <div className="flex flex-col space-y-2 ml-4">
-                  {alert.status === 'pendiente' && (
-                    <button
-                      onClick={() => handleAssign(alert.id)}
-                      className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
-                    >
-                      Asignar a mí
-                    </button>
-                  )}
-                  {alert.status === 'en curso' && (
-                    <button
-                      onClick={() => handleStatusChange(alert.id, 'resuelta')}
-                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
-                    >
-                      Marcar como Resuelta
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))
-        )}
+              );
+            })
+          )}
+        </div>
       </div>
 
-      {/* Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <h2 className="text-2xl font-semibold text-gray-900 mb-6">Nueva Alerta</h2>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Paciente *
-                  </label>
-                  <select
-                    value={formData.patientId}
-                    onChange={(e) =>
-                      setFormData({ ...formData, patientId: parseInt(e.target.value) })
-                    }
-                    required
-                    className="input-field"
-                  >
-                    <option value="0">Seleccionar paciente...</option>
-                    {patients.map((patient) => (
-                      <option key={patient.id} value={patient.id}>
-                        {patient.patientProfile?.firstName} {patient.patientProfile?.lastName} (
-                        {patient.email})
-                      </option>
-                    ))}
-                  </select>
+      <div className="w-80 flex-shrink-0">
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden sticky top-24">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h2 className="font-semibold text-gray-900">Pacientes Recientes</h2>
+          </div>
+
+          <div className="max-h-[calc(100vh-12rem)] overflow-y-auto">
+            {recentPatients.length === 0 ? (
+              <div className="p-6 text-center text-gray-500">
+                <p className="text-sm">No hay pacientes recientes</p>
+              </div>
+            ) : (
+              recentPatients.map((patient) => (
+                <div key={patient.id} className="px-6 py-4 border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer">
+                  <div className="flex items-start gap-3">
+                    <div className="w-12 h-12 bg-primary-600 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0">
+                      {patient.name.charAt(0)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-medium text-gray-900 text-sm truncate">{patient.name}</h3>
+                      <p className="text-xs text-gray-500 mb-2">{patient.time}</p>
+                      <p className="text-xs text-gray-600 mb-2">{patient.reason}</p>
+                      <span className={`${patient.statusColor} text-white text-xs px-2 py-1 rounded-full font-medium inline-block`}>
+                        {patient.status}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Tipo de Alerta ID *
-                  </label>
-                  <input
-                    type="number"
-                    value={formData.typeId}
-                    onChange={(e) =>
-                      setFormData({ ...formData, typeId: parseInt(e.target.value) })
-                    }
-                    required
-                    className="input-field"
-                    min="1"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Latitud (opcional)
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={formData.latitude || ''}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        latitude: e.target.value ? parseFloat(e.target.value) : undefined,
-                      })
-                    }
-                    className="input-field"
-                    placeholder="40.4168"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Longitud (opcional)
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={formData.longitude || ''}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        longitude: e.target.value ? parseFloat(e.target.value) : undefined,
-                      })
-                    }
-                    className="input-field"
-                    placeholder="-3.7038"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Descripción
-                  </label>
-                  <textarea
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    className="input-field"
-                    rows={3}
-                    placeholder="Descripción de la alerta..."
-                  />
-                </div>
-                <div className="flex space-x-3 pt-4">
-                  <button type="submit" className="flex-1 btn-primary">
-                    Crear Alerta
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowModal(false);
-                      resetForm();
-                    }}
-                    className="flex-1 btn-secondary"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </form>
-            </div>
+              ))
+            )}
+          </div>
+
+          <div className="px-6 py-4 border-t border-gray-200 text-center">
+            <button
+              onClick={() => handleViewPatientHistory(recentPatients[0])}
+              className="text-sm font-medium text-primary-600 hover:text-primary-700"
+            >
+              Ver historial completo
+            </button>
           </div>
         </div>
+      </div>
+
+      {selectedAlert && (
+        <EmergencyResponseModal
+          isOpen={showResponseModal}
+          onClose={handleCloseModal}
+          alertId={selectedAlert.id}
+          patientName={getPatientName(selectedAlert)}
+        />
+      )}
+
+      {selectedPatient && (
+        <PatientHistoryModal
+          isOpen={showPatientModal}
+          onClose={handleClosePatientModal}
+          patient={{
+            id: selectedPatient.id,
+            name: selectedPatient.name,
+            age: 22,
+            gender: 'Femenino',
+            studentId: 'EST-2023-1234',
+            allergies: 'Penicilina, Polen',
+            chronicConditions: 'Asma leve',
+            lastVisit: 'hace 2 horas'
+          }}
+        />
       )}
     </div>
   );
 };
 
 export default Alerts;
-

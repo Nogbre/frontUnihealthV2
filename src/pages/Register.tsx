@@ -19,7 +19,7 @@ const Register = () => {
 
     try {
       await register(email, password, name || undefined);
-      navigate('/');
+      navigate('/dashboard');
     } catch (err: any) {
       setError(err.response?.data?.message || 'Error al registrarse');
     } finally {

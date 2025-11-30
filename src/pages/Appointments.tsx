@@ -1,94 +1,107 @@
 import { useEffect, useState } from 'react';
-import { Plus, Calendar as CalendarIcon, CheckCircle, XCircle } from 'lucide-react';
-import {
-  appointmentsService,
-  Appointment,
-  CreateAppointmentDto,
-} from '../services/appointments.service';
-import { patientsService, Patient } from '../services/patients.service';
-import { usersService, User } from '../services/users.service';
-import { format } from 'date-fns';
+import { Calendar, ChevronLeft, ChevronRight, Plus, MessageSquare } from 'lucide-react';
+import { appointmentsService } from '../services/appointments.service';
+import { format, isToday, isSameDay, addDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
+import { es } from 'date-fns/locale';
+
+type ViewMode = 'day' | 'week' | 'month';
 
 const Appointments = () => {
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [patients, setPatients] = useState<Patient[]>([]);
-  const [nurses, setNurses] = useState<User[]>([]);
+  const [appointments, setAppointments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const [formData, setFormData] = useState<CreateAppointmentDto>({
-    patientId: 0,
-    nurseId: 0,
-    serviceTypeId: 1,
-    start: '',
-    end: '',
-    reason: '',
-  });
+  const [viewMode, setViewMode] = useState<ViewMode>('day');
+  const [selectedDate, setSelectedDate] = useState(new Date());
 
   useEffect(() => {
-    fetchData();
+    fetchAppointments();
   }, []);
 
-  const fetchData = async () => {
+  const fetchAppointments = async () => {
     try {
       setLoading(true);
-      const [appts, pats, usrs] = await Promise.all([
-        appointmentsService.getAll(),
-        patientsService.getAll(),
-        usersService.getAll(),
-      ]);
-      setAppointments(appts);
-      setPatients(pats);
-      // Assuming nurses are users with a specific role, for now using all users
-      setNurses(usrs);
+      const data = await appointmentsService.getAll();
+      setAppointments(data);
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error('Error fetching appointments:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await appointmentsService.create(formData);
-      setShowModal(false);
-      resetForm();
-      fetchData();
-    } catch (error: any) {
-      alert(error.response?.data?.message || 'Error al crear cita');
+  const getFilteredAppointments = () => {
+    switch (viewMode) {
+      case 'day':
+        return appointments.filter(apt => isSameDay(new Date(apt.start), selectedDate));
+      case 'week':
+        const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
+        const weekEnd = endOfWeek(selectedDate, { weekStartsOn: 1 });
+        return appointments.filter(apt => {
+          const aptDate = new Date(apt.start);
+          return aptDate >= weekStart && aptDate <= weekEnd;
+        });
+      case 'month':
+        const monthStart = startOfMonth(selectedDate);
+        const monthEnd = endOfMonth(selectedDate);
+        return appointments.filter(apt => {
+          const aptDate = new Date(apt.start);
+          return aptDate >= monthStart && aptDate <= monthEnd;
+        });
+      default:
+        return appointments;
     }
   };
 
-  const handleStatusChange = async (id: number, status: string) => {
-    try {
-      await appointmentsService.updateStatus(id, status);
-      fetchData();
-    } catch (error: any) {
-      alert(error.response?.data?.message || 'Error al actualizar estado');
-    }
+  const handlePreviousDay = () => {
+    setSelectedDate(addDays(selectedDate, -1));
   };
 
-  const resetForm = () => {
-    setFormData({
-      patientId: 0,
-      nurseId: 0,
-      serviceTypeId: 1,
-      start: '',
-      end: '',
-      reason: '',
-    });
+  const handleNextDay = () => {
+    setSelectedDate(addDays(selectedDate, 1));
+  };
+
+  const handleToday = () => {
+    setSelectedDate(new Date());
+  };
+
+  const getPatientName = (apt: any) => {
+    if (apt.patient?.patientProfile) {
+      const profile = apt.patient.patientProfile;
+      return `${profile.firstName} ${profile.lastName}`;
+    }
+    return apt.patient?.email || `Paciente #${apt.patientId}`;
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
+      case 'completada':
+        return 'bg-green-500';
       case 'confirmada':
-        return 'bg-green-100 text-green-800';
+        return 'bg-blue-500';
+      case 'pendiente':
+        return 'bg-yellow-500';
       case 'cancelada':
-        return 'bg-red-100 text-red-800';
+        return 'bg-red-500';
       default:
-        return 'bg-yellow-100 text-yellow-800';
+        return 'bg-gray-500';
     }
   };
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'completada':
+        return 'Completada';
+      case 'confirmada':
+        return 'Confirmada';
+      case 'pendiente':
+        return 'Pendiente';
+      case 'cancelada':
+        return 'Cancelada';
+      default:
+        return status;
+    }
+  };
+
+  const timeSlots = Array.from({ length: 13 }, (_, i) => i + 8); // 8:00 to 20:00
 
   if (loading) {
     return (
@@ -98,205 +111,268 @@ const Appointments = () => {
     );
   }
 
+  const filteredAppointments = getFilteredAppointments();
+
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Citas</h1>
-          <p className="text-gray-600 mt-1">Gestiona las citas médicas</p>
+          <h1 className="text-3xl font-bold text-gray-900">Mi Agenda de Citas</h1>
+          <p className="text-gray-600 mt-1">Gestiona tus citas y horarios de atención</p>
         </div>
-        <button onClick={() => setShowModal(true)} className="btn-primary flex items-center">
-          <Plus size={20} className="mr-2" />
+        <button className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium flex items-center gap-2">
+          <Plus size={20} />
           Nueva Cita
         </button>
       </div>
 
-      {/* Appointments List */}
-      <div className="grid grid-cols-1 gap-4">
-        {appointments.length === 0 ? (
-          <div className="card text-center py-12">
-            <CalendarIcon size={48} className="mx-auto mb-4 text-gray-400" />
-            <p className="text-gray-500">No hay citas programadas</p>
+      {/* Tabs and Date Selector */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <div className="flex items-center justify-between mb-4">
+          {/* Tabs */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setViewMode('day')}
+              className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${viewMode === 'day'
+                ? 'bg-primary-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+            >
+              Día
+            </button>
+            <button
+              onClick={() => setViewMode('week')}
+              className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${viewMode === 'week'
+                ? 'bg-primary-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+            >
+              Semana
+            </button>
+            <button
+              onClick={() => setViewMode('month')}
+              className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${viewMode === 'month'
+                ? 'bg-primary-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+            >
+              Mes
+            </button>
           </div>
-        ) : (
-          appointments.map((appointment) => (
-            <div key={appointment.id} className="card">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center space-x-3 mb-2">
-                    <h3 className="text-lg font-semibold text-gray-900">
-                      {format(new Date(appointment.start), "EEEE, d 'de' MMMM, yyyy")}
-                    </h3>
-                    <span
-                      className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                        appointment.status
-                      )}`}
-                    >
-                      {appointment.status}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
-                    <div>
-                      <span className="font-medium">Horario:</span>{' '}
-                      {format(new Date(appointment.start), 'HH:mm')} -{' '}
-                      {format(new Date(appointment.end), 'HH:mm')}
-                    </div>
-                    <div>
-                      <span className="font-medium">Paciente ID:</span> {appointment.patientId}
-                    </div>
-                    <div>
-                      <span className="font-medium">Enfermero ID:</span> {appointment.nurseId}
-                    </div>
-                    <div>
-                      <span className="font-medium">Tipo de Servicio ID:</span>{' '}
-                      {appointment.serviceTypeId}
-                    </div>
-                  </div>
-                  {appointment.reason && (
-                    <p className="mt-2 text-sm text-gray-700">
-                      <span className="font-medium">Motivo:</span> {appointment.reason}
-                    </p>
-                  )}
-                </div>
-                <div className="flex flex-col space-y-2 ml-4">
-                  {appointment.status === 'solicitada' && (
-                    <>
-                      <button
-                        onClick={() => handleStatusChange(appointment.id, 'confirmada')}
-                        className="flex items-center px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
-                      >
-                        <CheckCircle size={16} className="mr-1" />
-                        Confirmar
-                      </button>
-                      <button
-                        onClick={() => handleStatusChange(appointment.id, 'cancelada')}
-                        className="flex items-center px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
-                      >
-                        <XCircle size={16} className="mr-1" />
-                        Cancelar
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
+
+          {/* Date Navigation */}
+          <div className="flex items-center gap-4">
+            <button
+              onClick={handlePreviousDay}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <ChevronLeft size={20} />
+            </button>
+            <div className="flex items-center gap-2">
+              <Calendar size={20} className="text-gray-600" />
+              <span className="font-medium text-gray-900">
+                {isToday(selectedDate) ? 'Hoy, ' : ''}
+                {format(selectedDate, "d 'de' MMMM yyyy", { locale: es })}
+              </span>
             </div>
-          ))
-        )}
+            <button
+              onClick={handleNextDay}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <ChevronRight size={20} />
+            </button>
+            {!isToday(selectedDate) && (
+              <button
+                onClick={handleToday}
+                className="ml-2 px-3 py-1 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 transition-colors"
+              >
+                Hoy
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <h2 className="text-2xl font-semibold text-gray-900 mb-6">Nueva Cita</h2>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Paciente *
-                  </label>
-                  <select
-                    value={formData.patientId}
-                    onChange={(e) =>
-                      setFormData({ ...formData, patientId: parseInt(e.target.value) })
-                    }
-                    required
-                    className="input-field"
-                  >
-                    <option value="0">Seleccionar paciente...</option>
-                    {patients.map((patient) => (
-                      <option key={patient.id} value={patient.id}>
-                        {patient.patientProfile?.firstName} {patient.patientProfile?.lastName} (
-                        {patient.email})
-                      </option>
-                    ))}
-                  </select>
+      {/* Timeline View (Day) */}
+      {viewMode === 'day' && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex gap-4">
+            {/* Timeline */}
+            <div className="w-20 flex-shrink-0">
+              {timeSlots.map((hour) => (
+                <div key={hour} className="h-24 flex items-start justify-end pr-4 text-sm text-gray-500">
+                  {`${hour.toString().padStart(2, '0')}:00`}
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Enfermero *
-                  </label>
-                  <select
-                    value={formData.nurseId}
-                    onChange={(e) =>
-                      setFormData({ ...formData, nurseId: parseInt(e.target.value) })
-                    }
-                    required
-                    className="input-field"
-                  >
-                    <option value="0">Seleccionar enfermero...</option>
-                    {nurses.map((nurse) => (
-                      <option key={nurse.id} value={nurse.id}>
-                        {nurse.email}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Tipo de Servicio ID *
-                  </label>
-                  <input
-                    type="number"
-                    value={formData.serviceTypeId}
-                    onChange={(e) =>
-                      setFormData({ ...formData, serviceTypeId: parseInt(e.target.value) })
-                    }
-                    required
-                    className="input-field"
-                    min="1"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Fecha y Hora Inicio *
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={formData.start}
-                    onChange={(e) => setFormData({ ...formData, start: e.target.value })}
-                    required
-                    className="input-field"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Fecha y Hora Fin *
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={formData.end}
-                    onChange={(e) => setFormData({ ...formData, end: e.target.value })}
-                    required
-                    className="input-field"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Motivo</label>
-                  <textarea
-                    value={formData.reason}
-                    onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-                    className="input-field"
-                    rows={3}
-                  />
-                </div>
-                <div className="flex space-x-3 pt-4">
-                  <button type="submit" className="flex-1 btn-primary">
-                    Crear Cita
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowModal(false);
-                      resetForm();
-                    }}
-                    className="flex-1 btn-secondary"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </form>
+              ))}
             </div>
+
+            {/* Appointments */}
+            <div className="flex-1 relative">
+              {timeSlots.map((hour) => (
+                <div key={hour} className="h-24 border-t border-gray-100"></div>
+              ))}
+
+              {/* Appointment Cards */}
+              {filteredAppointments.length === 0 ? (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <p className="text-gray-500">No hay citas programadas para este día</p>
+                </div>
+              ) : (
+                filteredAppointments.map((apt) => {
+                  const startTime = new Date(apt.start);
+                  const hour = startTime.getHours();
+                  const minute = startTime.getMinutes();
+                  const topPosition = ((hour - 8) * 96) + (minute / 60 * 96);
+
+                  return (
+                    <div
+                      key={apt.id}
+                      className="absolute left-0 right-0 ml-2 mr-2"
+                      style={{ top: `${topPosition}px` }}
+                    >
+                      <div className="bg-white border-2 border-primary-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
+                        <div className="flex items-start gap-3">
+                          {/* Avatar */}
+                          <div className="w-12 h-12 bg-primary-600 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0">
+                            {getPatientName(apt).charAt(0)}
+                          </div>
+
+                          {/* Info */}
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-gray-900">{getPatientName(apt)}</h3>
+                            <p className="text-sm text-gray-600">
+                              {format(new Date(apt.start), 'HH:mm')}
+                              {apt.end && ` - ${format(new Date(apt.end), 'HH:mm')}`}
+                            </p>
+                            <p className="text-sm text-gray-500 mt-1">
+                              {apt.reason || apt.serviceType?.name || 'Consulta general'}
+                            </p>
+                            <span className={`${getStatusColor(apt.status)} text-white text-xs px-2 py-1 rounded-full font-medium inline-block mt-2`}>
+                              {getStatusText(apt.status)}
+                            </span>
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex flex-col gap-2">
+                            <button className="px-3 py-1 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 transition-colors">
+                              Ver Detalles
+                            </button>
+                            <button className="px-3 py-1 border border-primary-600 text-primary-600 text-sm rounded-lg hover:bg-primary-50 transition-colors flex items-center gap-1">
+                              <MessageSquare size={14} />
+                              Mensaje
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* List View (Week/Month) */}
+      {(viewMode === 'week' || viewMode === 'month') && (
+        <div className="space-y-6">
+          {/* Description and Stats */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            {/* Description */}
+            <div className="text-center mb-8">
+              <div className="inline-block p-4 bg-gray-100 rounded-full mb-4">
+                <Calendar size={48} className="text-gray-400" />
+              </div>
+              <h2 className="text-xl font-semibold text-gray-900 mb-2">
+                {viewMode === 'week' ? 'Vista semanal del calendario' : 'Vista mensual del calendario'}
+              </h2>
+              <p className="text-gray-600">
+                {viewMode === 'week'
+                  ? 'Muestra las citas de Lunes a Domingo'
+                  : 'Muestra todas las citas del mes con indicadores visuales'}
+              </p>
+            </div>
+
+            {/* Statistics Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Total Today */}
+              <div className="bg-blue-50 rounded-xl p-6 text-center border border-blue-100">
+                <div className="text-4xl font-bold text-blue-600 mb-2">
+                  {appointments.filter(a => isToday(new Date(a.start))).length}
+                </div>
+                <p className="text-sm text-gray-600">Total de Citas Hoy</p>
+              </div>
+
+              {/* Confirmed */}
+              <div className="bg-green-50 rounded-xl p-6 text-center border border-green-100">
+                <div className="text-4xl font-bold text-green-600 mb-2">
+                  {filteredAppointments.filter(a => a.status === 'confirmada').length}
+                </div>
+                <p className="text-sm text-gray-600">Confirmadas</p>
+              </div>
+
+              {/* Pending */}
+              <div className="bg-yellow-50 rounded-xl p-6 text-center border border-yellow-100">
+                <div className="text-4xl font-bold text-yellow-600 mb-2">
+                  {filteredAppointments.filter(a => a.status === 'pendiente').length}
+                </div>
+                <p className="text-sm text-gray-600">Pendientes</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Appointments List */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            {filteredAppointments.length === 0 ? (
+              <p className="text-gray-500 text-center py-12">No hay citas programadas para este período</p>
+            ) : (
+              <div className="space-y-4">
+                {filteredAppointments.map((apt) => (
+                  <div key={apt.id} className="border border-gray-200 rounded-lg p-4 hover:border-primary-300 transition-colors">
+                    <div className="flex items-start gap-4">
+                      {/* Date Badge */}
+                      <div className="flex-shrink-0 text-center">
+                        <div className="bg-primary-600 text-white rounded-lg px-3 py-2">
+                          <div className="text-2xl font-bold">{format(new Date(apt.start), 'd')}</div>
+                          <div className="text-xs">{format(new Date(apt.start), 'MMM', { locale: es })}</div>
+                        </div>
+                      </div>
+
+                      {/* Avatar */}
+                      <div className="w-12 h-12 bg-primary-600 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0">
+                        {getPatientName(apt).charAt(0)}
+                      </div>
+
+                      {/* Info */}
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-gray-900">{getPatientName(apt)}</h3>
+                        <p className="text-sm text-gray-600">
+                          {format(new Date(apt.start), "EEEE, d 'de' MMMM 'a las' HH:mm", { locale: es })}
+                        </p>
+                        <p className="text-sm text-gray-500 mt-1">
+                          {apt.reason || apt.serviceType?.name || 'Consulta general'}
+                        </p>
+                        <span className={`${getStatusColor(apt.status)} text-white text-xs px-2 py-1 rounded-full font-medium inline-block mt-2`}>
+                          {getStatusText(apt.status)}
+                        </span>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex flex-col gap-2">
+                        <button className="px-4 py-2 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 transition-colors">
+                          Ver Detalles
+                        </button>
+                        <button className="px-4 py-2 border border-primary-600 text-primary-600 text-sm rounded-lg hover:bg-primary-50 transition-colors flex items-center gap-2">
+                          <MessageSquare size={16} />
+                          Mensaje
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -305,4 +381,3 @@ const Appointments = () => {
 };
 
 export default Appointments;
-

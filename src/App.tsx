@@ -7,7 +7,15 @@ import Patients from './pages/Patients';
 import Appointments from './pages/Appointments';
 import Alerts from './pages/Alerts';
 import Vitals from './pages/Vitals';
+import Landing from './pages/Landing';
 import Layout from './components/Layout';
+import KioskManagement from './pages/KioskManagement';
+import MedicineInventory from './pages/MedicineInventory';
+import KioskStaff from './pages/KioskStaff';
+import Reports from './pages/Reports';
+import CreateEmergencyReport from './pages/CreateEmergencyReport';
+import CreateConsultationReport from './pages/CreateConsultationReport';
+import CreateFollowUpReport from './pages/CreateFollowUpReport';
 
 const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
@@ -26,10 +34,11 @@ const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 function AppRoutes() {
   return (
     <Routes>
+      <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route
-        path="/"
+        path="/dashboard/*"
         element={
           <PrivateRoute>
             <Layout />
@@ -41,6 +50,13 @@ function AppRoutes() {
         <Route path="appointments" element={<Appointments />} />
         <Route path="alerts" element={<Alerts />} />
         <Route path="vitals" element={<Vitals />} />
+        <Route path="kiosk-management" element={<KioskManagement />} />
+        <Route path="medicine-inventory" element={<MedicineInventory />} />
+        <Route path="kiosk-staff" element={<KioskStaff />} />
+        <Route path="reports" element={<Reports />} />
+        <Route path="reports/emergency/create" element={<CreateEmergencyReport />} />
+        <Route path="reports/consultation/create" element={<CreateConsultationReport />} />
+        <Route path="reports/followup/create" element={<CreateFollowUpReport />} />
       </Route>
     </Routes>
   );

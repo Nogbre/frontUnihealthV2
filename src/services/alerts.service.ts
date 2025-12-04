@@ -1,70 +1,25 @@
-import { apiService } from './api';
+import { mockAlertsService, Alert, CreateAlertDto } from './mock/mockAlerts.service';
 
-export interface Alert {
-  id: number;
-  status: string;
-  patientId: number;
-  typeId: number;
-  latitude?: number;
-  longitude?: number;
-  description?: string;
-  createdAt: string;
-  resolvedAt?: string;
-  assignedToId?: number;
-  patient?: {
-    id: number;
-    email: string;
-    patientProfile?: {
-      firstName: string;
-      lastName: string;
-      dob: string;
-      gender: string;
-      allergies?: string;
-      history?: string;
-    };
-  };
-  type?: {
-    id: number;
-    name: string;
-  };
-  assignedTo?: {
-    id: number;
-    email: string;
-  };
-}
-
-export interface CreateAlertDto {
-  patientId: number;
-  typeId: number;
-  latitude?: number;
-  longitude?: number;
-  description?: string;
-}
-
-export interface UpdateAlertDto {
-  status?: string;
-  assignedToId?: number;
-}
+export type { Alert, CreateAlertDto };
 
 export const alertsService = {
   async getAll(): Promise<Alert[]> {
-    return await apiService.get<Alert[]>('/alerts');
+    return await mockAlertsService.getAll();
   },
 
   async getById(id: number): Promise<Alert> {
-    return await apiService.get<Alert>(`/alerts/${id}`);
+    return await mockAlertsService.getById(id);
   },
 
   async create(data: CreateAlertDto): Promise<Alert> {
-    return await apiService.post<Alert>('/alerts', data);
+    return await mockAlertsService.create(data);
   },
 
-  async update(id: number, data: UpdateAlertDto): Promise<Alert> {
-    return await apiService.patch<Alert>(`/alerts/${id}`, data);
+  async updateStatus(id: number, status: string): Promise<Alert> {
+    return await mockAlertsService.updateStatus(id, status);
   },
 
-  async assignToMe(id: number): Promise<Alert> {
-    return await apiService.patch<Alert>(`/alerts/${id}/assign`);
+  async delete(id: number): Promise<void> {
+    return await mockAlertsService.delete(id);
   },
 };
-

@@ -20,11 +20,33 @@ export interface AuthResponse {
 
 export const authService = {
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
-    return await apiService.post<AuthResponse>('/auth/login', credentials);
+    console.log('🔐 LOGIN - Sending:', credentials);
+    try {
+      const response = await apiService.post<AuthResponse>('/auth/login', credentials);
+      console.log('✅ LOGIN - Success:', response);
+      return response;
+    } catch (error) {
+      console.error('❌ LOGIN - Error:', error);
+      throw error;
+    }
   },
 
   async register(data: RegisterData): Promise<AuthResponse> {
-    return apiService.post<AuthResponse>('/auth/register', data);
+    // Only send name if it has a value
+    const payload = {
+      email: data.email,
+      password: data.password,
+      ...(data.name ? { name: data.name } : {})
+    };
+    console.log('📝 REGISTER - Sending:', payload);
+    try {
+      const response = await apiService.post<AuthResponse>('/auth/register', payload);
+      console.log('✅ REGISTER - Success:', response);
+      return response;
+    } catch (error) {
+      console.error('❌ REGISTER - Error:', error);
+      throw error;
+    }
   },
 
   logout() {

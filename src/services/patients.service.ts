@@ -1,54 +1,25 @@
-import { apiService } from './api';
+import { mockPatientsService, Patient, CreatePatientDto } from './mock/mockPatients.service';
 
-export interface Patient {
-  id: number;
-  email: string;
-  patientProfile?: {
-    userId: number;
-    firstName: string;
-    lastName: string;
-    dob: string;
-    gender: string;
-    phone?: string;
-  };
-}
-
-export interface CreatePatientDto {
-  firstName: string;
-  lastName: string;
-  email?: string;
-  phone?: string;
-  dob: string;
-  gender: string;
-}
-
-export interface UpdatePatientDto {
-  firstName?: string;
-  lastName?: string;
-  dob?: string;
-  gender?: string;
-  phone?: string;
-}
+export type { Patient, CreatePatientDto };
 
 export const patientsService = {
   async getAll(): Promise<Patient[]> {
-    return await apiService.get<Patient[]>('/patients');
+    return await mockPatientsService.getAll();
   },
 
   async getById(id: number): Promise<Patient> {
-    return await apiService.get<Patient>(`/patients/${id}`);
+    return await mockPatientsService.getById(id);
   },
 
   async create(data: CreatePatientDto): Promise<Patient> {
-    return await apiService.post<Patient>('/patients', data);
+    return await mockPatientsService.create(data);
   },
 
-  async update(id: number, data: UpdatePatientDto): Promise<Patient> {
-    return await apiService.patch<Patient>(`/patients/${id}`, data);
+  async update(id: number, data: Partial<CreatePatientDto>): Promise<Patient> {
+    return await mockPatientsService.update(id, data);
   },
 
   async delete(id: number): Promise<void> {
-    return await apiService.delete<void>(`/patients/${id}`);
+    return await mockPatientsService.delete(id);
   },
 };
-

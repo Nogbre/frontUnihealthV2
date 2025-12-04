@@ -16,6 +16,7 @@ import Reports from './pages/Reports';
 import CreateEmergencyReport from './pages/CreateEmergencyReport';
 import CreateConsultationReport from './pages/CreateConsultationReport';
 import CreateFollowUpReport from './pages/CreateFollowUpReport';
+import NewAppointment from './pages/NewAppointment';
 
 const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
@@ -48,6 +49,7 @@ function AppRoutes() {
         <Route index element={<Dashboard />} />
         <Route path="patients" element={<Patients />} />
         <Route path="appointments" element={<Appointments />} />
+        <Route path="appointments/new" element={<NewAppointment />} />
         <Route path="alerts" element={<Alerts />} />
         <Route path="vitals" element={<Vitals />} />
         <Route path="kiosk-management" element={<KioskManagement />} />

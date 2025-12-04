@@ -69,12 +69,11 @@ const Layout = () => {
     { name: 'Mis Citas', href: '/dashboard/appointments', icon: Calendar, badge: appointmentsCount > 0 ? appointmentsCount : null },
     { name: 'Pacientes', href: '/dashboard/patients', icon: Users, badge: null },
     { name: 'Mis Reportes', href: '/dashboard/reports', icon: FileText, badge: null },
-    { name: 'Configuración', href: '/dashboard/settings', icon: Settings, badge: null },
   ];
 
   const kioskSubMenu = [
     { name: 'Información del Kiosco', href: '/dashboard/kiosk-management' },
-    { name: 'Inventario de Medicamentos', href: '/dashboard/medicine-inventory' },
+    // { name: 'Inventario de Medicamentos', href: '/dashboard/medicine-inventory' }, // Backend no implementado
     { name: 'Personal del Kiosco', href: '/dashboard/kiosk-staff' },
   ];
 

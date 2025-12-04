@@ -80,12 +80,42 @@ const Alerts = () => {
 
   const handleAccept = async (alert: Alert) => {
     try {
-      await alertsService.assignToMe(alert.id);
+      await alertsService.updateStatus(alert.id, 'en curso');
       setSelectedAlert(alert);
       setShowResponseModal(true);
       fetchData();
     } catch (error: any) {
       console.error('Error accepting alert:', error);
+    }
+  };
+
+  const handleGetDirections = (alert: Alert) => {
+    if (alert.latitude && alert.longitude) {
+      const url = `https://www.google.com/maps/dir/?api=1&destination=${alert.latitude},${alert.longitude}`;
+      window.open(url, '_blank');
+    } else {
+      window.alert('Ubicación no disponible');
+    }
+  };
+
+  const handleCallPatient = (alert: Alert) => {
+    const phone = alert.patient?.patientProfile?.phone;
+    if (phone) {
+      window.location.href = `tel:${phone}`;
+    } else {
+      window.alert('Número de teléfono no disponible');
+    }
+  };
+
+  const handleViewAlertHistory = (alert: Alert) => {
+    if (alert.patient) {
+      const patientData = {
+        id: alert.patientId,
+        name: getPatientName(alert),
+        ...alert.patient
+      };
+      setSelectedPatient(patientData);
+      setShowPatientModal(true);
     }
   };
 
@@ -106,11 +136,13 @@ const Alerts = () => {
   };
 
   const handleReject = async (id: number) => {
-    try {
-      await alertsService.update(id, { status: 'rechazada' });
-      fetchData();
-    } catch (error: any) {
-      console.error('Error rejecting alert:', error);
+    if (confirm('¿Estás seguro de que deseas rechazar esta alerta?')) {
+      try {
+        await alertsService.updateStatus(id, 'rechazada');
+        fetchData();
+      } catch (error: any) {
+        console.error('Error rejecting alert:', error);
+      }
     }
   };
 
@@ -309,7 +341,10 @@ const Alerts = () => {
                               >
                                 ACEPTAR Y RESPONDER
                               </button>
-                              <button className="w-full px-4 py-3 border-2 border-primary-300 text-primary-600 rounded-lg hover:bg-primary-50 transition-colors font-medium text-sm">
+                              <button
+                                onClick={() => handleViewAlertHistory(alert)}
+                                className="w-full px-4 py-3 border-2 border-primary-300 text-primary-600 rounded-lg hover:bg-primary-50 transition-colors font-medium text-sm"
+                              >
                                 Ver Historial Completo
                               </button>
                             </>
@@ -321,12 +356,18 @@ const Alerts = () => {
                             </div>
                           )}
 
-                          <button className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm flex items-center justify-center gap-2">
+                          <button
+                            onClick={() => handleGetDirections(alert)}
+                            className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm flex items-center justify-center gap-2"
+                          >
                             <Navigation size={16} />
                             Obtener Direcciones
                           </button>
 
-                          <button className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm flex items-center justify-center gap-2">
+                          <button
+                            onClick={() => handleCallPatient(alert)}
+                            className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm flex items-center justify-center gap-2"
+                          >
                             <Phone size={16} />
                             Llamar al Paciente
                           </button>
@@ -371,7 +412,11 @@ const Alerts = () => {
               </div>
             ) : (
               recentPatients.map((patient) => (
-                <div key={patient.id} className="px-6 py-4 border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer">
+                <div
+                  key={patient.id}
+                  onClick={() => handleViewPatientHistory(patient)}
+                  className="px-6 py-4 border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer"
+                >
                   <div className="flex items-start gap-3">
                     <div className="w-12 h-12 bg-primary-600 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0">
                       {patient.name.charAt(0)}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Calendar, ChevronLeft, ChevronRight, Plus, MessageSquare } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Calendar, ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react';
 import { appointmentsService } from '../services/appointments.service';
 import { format, isToday, isSameDay, addDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -7,10 +8,13 @@ import { es } from 'date-fns/locale';
 type ViewMode = 'day' | 'week' | 'month';
 
 const Appointments = () => {
+  const navigate = useNavigate();
   const [appointments, setAppointments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>('day');
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedAppointment, setSelectedAppointment] = useState<any>(null);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
 
   useEffect(() => {
     fetchAppointments();
@@ -25,6 +29,23 @@ const Appointments = () => {
       console.error('Error fetching appointments:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleViewDetails = (apt: any) => {
+    setSelectedAppointment(apt);
+    setShowDetailsModal(true);
+  };
+
+  const handleDeleteAppointment = async (apt: any) => {
+    if (window.confirm(`¿Estás seguro de eliminar la cita con ${getPatientName(apt)}?`)) {
+      try {
+        await appointmentsService.delete(apt.id);
+        fetchAppointments();
+      } catch (error) {
+        console.error('Error deleting appointment:', error);
+        window.alert('Error al eliminar la cita');
+      }
     }
   };
 
@@ -121,7 +142,10 @@ const Appointments = () => {
           <h1 className="text-3xl font-bold text-gray-900">Mi Agenda de Citas</h1>
           <p className="text-gray-600 mt-1">Gestiona tus citas y horarios de atención</p>
         </div>
-        <button className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium flex items-center gap-2">
+        <button
+          onClick={() => navigate('/dashboard/appointments/new')}
+          className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium flex items-center gap-2"
+        >
           <Plus size={20} />
           Nueva Cita
         </button>
@@ -255,12 +279,18 @@ const Appointments = () => {
 
                           {/* Actions */}
                           <div className="flex flex-col gap-2">
-                            <button className="px-3 py-1 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 transition-colors">
+                            <button
+                              onClick={() => handleViewDetails(apt)}
+                              className="px-3 py-1 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 transition-colors"
+                            >
                               Ver Detalles
                             </button>
-                            <button className="px-3 py-1 border border-primary-600 text-primary-600 text-sm rounded-lg hover:bg-primary-50 transition-colors flex items-center gap-1">
-                              <MessageSquare size={14} />
-                              Mensaje
+                            <button
+                              onClick={() => handleDeleteAppointment(apt)}
+                              className="px-3 py-1 border border-red-600 text-red-600 text-sm rounded-lg hover:bg-red-50 transition-colors flex items-center gap-1"
+                            >
+                              <Trash2 size={14} />
+                              Eliminar
                             </button>
                           </div>
                         </div>
@@ -373,6 +403,57 @@ const Appointments = () => {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Details Modal */}
+      {showDetailsModal && selectedAppointment && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
+            <h3 className="text-xl font-bold text-gray-900 mb-4">Detalles de la Cita</h3>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-sm font-medium text-gray-600">Paciente</label>
+                <p className="text-gray-900">{getPatientName(selectedAppointment)}</p>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-gray-600">Fecha y Hora</label>
+                <p className="text-gray-900">
+                  {format(new Date(selectedAppointment.start), "d 'de' MMMM yyyy 'a las' HH:mm", { locale: es })}
+                </p>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-gray-600">Tipo de Servicio</label>
+                <p className="text-gray-900">{selectedAppointment.serviceType?.name || 'Consulta general'}</p>
+              </div>
+
+              {selectedAppointment.reason && (
+                <div>
+                  <label className="text-sm font-medium text-gray-600">Razón</label>
+                  <p className="text-gray-900">{selectedAppointment.reason}</p>
+                </div>
+              )}
+
+              <div>
+                <label className="text-sm font-medium text-gray-600">Estado</label>
+                <p>
+                  <span className={`${getStatusColor(selectedAppointment.status)} text-white text-xs px-2 py-1 rounded-full font-medium inline-block`}>
+                    {getStatusText(selectedAppointment.status)}
+                  </span>
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowDetailsModal(false)}
+              className="w-full mt-6 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+            >
+              Cerrar
+            </button>
           </div>
         </div>
       )}

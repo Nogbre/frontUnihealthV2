@@ -5,6 +5,7 @@ import { patientsService, Patient } from '../services/patients.service';
 import { appointmentsService, Appointment } from '../services/appointments.service';
 import { alertsService, Alert } from '../services/alerts.service';
 import { format } from 'date-fns';
+import SeedButton from '../components/SeedButton';
 
 const Dashboard = () => {
   const [stats, setStats] = useState({
@@ -94,9 +95,12 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600 mt-1">Resumen general del sistema</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-gray-600 mt-1">Resumen general del sistema</p>
+        </div>
+        <SeedButton />
       </div>
 
       {/* Stats Grid */}
@@ -110,7 +114,7 @@ const Dashboard = () => {
               className="card hover:shadow-md transition-shadow"
             >
               <div className="flex items-center justify-between">
-                <div>
+                <div className="text-center flex-1">
                   <p className="text-sm font-medium text-gray-600">{stat.name}</p>
                   <p className="text-3xl font-bold text-gray-900 mt-2">{stat.value}</p>
                 </div>
@@ -157,13 +161,12 @@ const Dashboard = () => {
                     )}
                   </div>
                   <span
-                    className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      appointment.status === 'confirmada'
-                        ? 'bg-green-100 text-green-800'
-                        : appointment.status === 'cancelada'
+                    className={`px-2 py-1 rounded-full text-xs font-medium ${appointment.status === 'confirmada'
+                      ? 'bg-green-100 text-green-800'
+                      : appointment.status === 'cancelada'
                         ? 'bg-red-100 text-red-800'
                         : 'bg-yellow-100 text-yellow-800'
-                    }`}
+                      }`}
                   >
                     {appointment.status}
                   </span>
@@ -205,13 +208,12 @@ const Dashboard = () => {
                     )}
                   </div>
                   <span
-                    className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      alert.status === 'resuelta'
-                        ? 'bg-green-100 text-green-800'
-                        : alert.status === 'en curso'
+                    className={`px-2 py-1 rounded-full text-xs font-medium ${alert.status === 'resuelta'
+                      ? 'bg-green-100 text-green-800'
+                      : alert.status === 'en curso'
                         ? 'bg-blue-100 text-blue-800'
                         : 'bg-red-100 text-red-800'
-                    }`}
+                      }`}
                   >
                     {alert.status}
                   </span>

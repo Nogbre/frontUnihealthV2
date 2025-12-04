@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Activity } from 'lucide-react';
 
@@ -34,7 +34,7 @@ const Login = () => {
             <Activity className="text-white" size={32} />
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Unihealth</h1>
-          <p className="text-gray-600">Sistema de Gestión de Salud</p>
+          <p className="text-gray-600">Portal Médico - Staff</p>
         </div>
 
         <div className="card">
@@ -85,10 +85,10 @@ const Login = () => {
           </form>
 
           <p className="mt-6 text-center text-sm text-gray-600">
-            ¿No tienes cuenta?{' '}
-            <Link to="/register" className="text-primary-600 hover:text-primary-700 font-medium">
-              Regístrate
-            </Link>
+            Portal exclusivo para personal médico
+          </p>
+          <p className="mt-2 text-center text-xs text-gray-500">
+            Los pacientes deben usar la aplicación móvil
           </p>
         </div>
       </div>

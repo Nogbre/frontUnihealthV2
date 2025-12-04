@@ -26,6 +26,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const login = async (email: string, password: string) => {
     const response = await authService.login({ email, password });
+    
+    // Validate that user is medical staff (doctor, nurse, admin)
+    // Patients use the mobile app, not the web dashboard
+    const allowedRoles = ['doctor', 'nurse', 'admin', 'enfermero', 'medico', 'administrador'];
+    const userRole = response.role?.toLowerCase() || '';
+    
+    if (!allowedRoles.includes(userRole)) {
+      authService.logout();
+      throw new Error('Esta aplicación es solo para personal médico. Los pacientes deben usar la aplicación móvil.');
+    }
+    
     authService.setAuth(response);
     setUser(response);
   };

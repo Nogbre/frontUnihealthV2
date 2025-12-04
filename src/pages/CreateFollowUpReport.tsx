@@ -1,9 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ClipboardList } from 'lucide-react';
+import { clinicalRecordsService } from '../services/clinical-records.service';
+import { patientsService, Patient } from '../services/patients.service';
 
 const CreateFollowUpReport = () => {
     const navigate = useNavigate();
+    const [patients, setPatients] = useState<Patient[]>([]);
+    const [loading, setLoading] = useState(true);
     const [formData, setFormData] = useState({
         patientName: '',
         patientId: '',
@@ -21,11 +25,86 @@ const CreateFollowUpReport = () => {
         nextAppointment: ''
     });
 
-    const handleSubmit = (e: React.FormEvent) => {
+    useEffect(() => {
+        fetchPatients();
+    }, []);
+
+    const fetchPatients = async () => {
+        try {
+            const data = await patientsService.getAll();
+            setPatients(data);
+        } catch (error) {
+            console.error('Error fetching patients:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handlePatientChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const selectedPatient = patients.find(p => p.id.toString() === e.target.value);
+        if (selectedPatient) {
+            setFormData({
+                ...formData,
+                patientId: selectedPatient.id.toString(),
+                patientName: `${selectedPatient.patientProfile?.firstName} ${selectedPatient.patientProfile?.lastName}`
+            });
+        }
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        // TODO: Save report to backend
-        console.log('Follow-up report data:', formData);
-        navigate('/dashboard/reports');
+        
+        try {
+            // Compile all form data into a single note
+            const note = `
+REPORTE DE SEGUIMIENTO
+=====================
+
+INFORMACIÓN DEL PACIENTE:
+- Nombre: ${formData.patientName}
+- ID: ${formData.patientId}
+- Fecha y Hora: ${formData.dateTime}
+
+ANTECEDENTES DEL TRATAMIENTO:
+- Diagnóstico Original: ${formData.originalDiagnosis}
+- Plan de Tratamiento Actual: ${formData.currentTreatmentPlan}
+
+EVALUACIÓN DE EVOLUCIÓN:
+- Estado del Tratamiento: ${formData.evolutionRating}
+- Tipo de Evolución: ${formData.patientStatus}
+- Estado Actual: ${formData.improvements}
+
+MEJORÍAS OBSERVADAS:
+${formData.complications || 'Ninguna registrada'}
+
+AJUSTES AL TRATAMIENTO:
+${formData.treatmentAdjustments}
+
+NUEVAS PRESCRIPCIONES:
+${formData.newPrescriptions || 'Ninguna'}
+
+EXÁMENES ADICIONALES:
+${formData.additionalTests || 'Ninguno'}
+
+PRÓXIMOS PASOS:
+${formData.nextSteps}
+
+PRÓXIMO SEGUIMIENTO:
+${formData.nextAppointment || 'No programado'}
+            `.trim();
+
+            await clinicalRecordsService.create({
+                patientId: formData.patientId,
+                noteTypeId: '2', // evolucion = followup
+                note: note
+            });
+
+            alert('Reporte de seguimiento guardado exitosamente');
+            navigate('/dashboard/reports');
+        } catch (error: any) {
+            console.error('Error saving report:', error);
+            alert(error.response?.data?.message || 'Error al guardar el reporte');
+        }
     };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -70,34 +149,28 @@ const CreateFollowUpReport = () => {
                     {/* Patient Information */}
                     <div className="bg-white rounded-xl border border-gray-200 p-6">
                         <h2 className="text-lg font-semibold text-gray-900 mb-6">Información del Paciente</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="grid grid-cols-1 gap-6">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Nombre Completo <span className="text-red-500">*</span>
+                                    Seleccionar Paciente <span className="text-red-500">*</span>
                                 </label>
-                                <input
-                                    type="text"
-                                    name="patientName"
-                                    value={formData.patientName}
-                                    onChange={handleChange}
-                                    placeholder="Nombre del paciente"
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none"
-                                    required
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    ID / Documento <span className="text-red-500">*</span>
-                                </label>
-                                <input
-                                    type="text"
-                                    name="patientId"
-                                    value={formData.patientId}
-                                    onChange={handleChange}
-                                    placeholder="Número de identificación"
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none"
-                                    required
-                                />
+                                {loading ? (
+                                    <div className="text-gray-500">Cargando pacientes...</div>
+                                ) : (
+                                    <select
+                                        value={formData.patientId}
+                                        onChange={handlePatientChange}
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none"
+                                        required
+                                    >
+                                        <option value="">Seleccionar paciente...</option>
+                                        {patients.map((patient) => (
+                                            <option key={patient.id} value={patient.id}>
+                                                {patient.patientProfile?.firstName} {patient.patientProfile?.lastName} ({patient.email})
+                                            </option>
+                                        ))}
+                                    </select>
+                                )}
                             </div>
                         </div>
                     </div>

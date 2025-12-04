@@ -1,89 +1,122 @@
+import { clinicalRecordsService, ClinicalRecord } from './clinical-records.service';
+import { catalogsService } from './catalogs.service';
+
 export interface Report {
-    id: number;
-    type: 'emergency' | 'consultation' | 'followup';
-    patientName: string;
-    patientId: number;
-    date: string;
-    time: string;
-    status: 'completed' | 'draft';
-    content?: string;
-    createdBy: string;
+  id: number;
+  type: 'emergency' | 'consultation' | 'followup';
+  patientName: string;
+  patientId: number;
+  date: string;
+  time: string;
+  status: 'completed' | 'draft';
+  content?: string;
+  createdBy: string;
 }
 
-// Mock data
-const mockReports: Report[] = [
-    {
-        id: 1,
-        type: 'emergency',
-        patientName: 'María González Rodríguez',
-        patientId: 1,
-        date: '2025-10-26',
-        time: '09:30',
-        status: 'completed',
-        content: 'Reporte de emergencia completado',
-        createdBy: 'Dr. Roberto Fernández'
-    },
-    {
-        id: 2,
-        type: 'consultation',
-        patientName: 'Juan Pérez Martínez',
-        patientId: 2,
-        date: '2025-10-25',
-        time: '14:15',
-        status: 'completed',
-        content: 'Consulta general completada',
-        createdBy: 'Dr. Roberto Fernández'
-    },
-    {
-        id: 3,
-        type: 'followup',
-        patientName: 'Ana Martínez López',
-        patientId: 3,
-        date: '2025-10-24',
-        time: '11:00',
-        status: 'draft',
-        content: 'Borrador de seguimiento en progreso',
-        createdBy: 'Dr. Roberto Fernández'
-    }
-];
+// Map note type ID to report type
+const mapNoteTypeToReportType = (noteTypeId: string): 'emergency' | 'consultation' | 'followup' => {
+  // Based on catalogs: 1=consulta, 2=evolucion, 3=ingreso, 4=egreso
+  // Map: consulta->consultation, evolucion->followup, ingreso/egreso->emergency
+  switch (noteTypeId) {
+    case '1': return 'consultation';
+    case '2': return 'followup';
+    case '3':
+    case '4': return 'emergency';
+    default: return 'consultation';
+  }
+};
+
+// Map clinical record to report
+const mapClinicalRecordToReport = (record: ClinicalRecord): Report => {
+  const createdDate = new Date(record.createdAt);
+  
+  return {
+    id: parseInt(record.id),
+    type: mapNoteTypeToReportType(record.noteTypeId),
+    patientName: record.patient?.patientProfile 
+      ? `${record.patient.patientProfile.firstName} ${record.patient.patientProfile.lastName}`
+      : record.patient?.email || 'Paciente desconocido',
+    patientId: parseInt(record.patientId),
+    date: createdDate.toISOString().split('T')[0],
+    time: createdDate.toTimeString().slice(0, 5),
+    status: 'completed', // Clinical records are always completed once created
+    content: record.note,
+    createdBy: record.createdBy?.email || 'Doctor'
+  };
+};
 
 export const reportsService = {
-    getAll: async (): Promise<Report[]> => {
-        return new Promise((resolve) => {
-            setTimeout(() => resolve(mockReports), 100);
-        });
-    },
-
-    getById: async (id: number): Promise<Report | undefined> => {
-        return new Promise((resolve) => {
-            setTimeout(() => resolve(mockReports.find(r => r.id === id)), 100);
-        });
-    },
-
-    getByType: async (type: 'emergency' | 'consultation' | 'followup'): Promise<Report[]> => {
-        return new Promise((resolve) => {
-            setTimeout(() => resolve(mockReports.filter(r => r.type === type)), 100);
-        });
-    },
-
-    getDrafts: async (): Promise<Report[]> => {
-        return new Promise((resolve) => {
-            setTimeout(() => resolve(mockReports.filter(r => r.status === 'draft')), 100);
-        });
-    },
-
-    getStats: async () => {
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                const total = mockReports.length;
-                const completed = mockReports.filter(r => r.status === 'completed').length;
-                const drafts = mockReports.filter(r => r.status === 'draft').length;
-                const emergency = mockReports.filter(r => r.type === 'emergency').length;
-                const consultation = mockReports.filter(r => r.type === 'consultation').length;
-                const followup = mockReports.filter(r => r.type === 'followup').length;
-
-                resolve({ total, completed, drafts, emergency, consultation, followup });
-            }, 100);
-        });
+  getAll: async (): Promise<Report[]> => {
+    console.log('📋 REPORTS - Fetching all reports via clinical records');
+    try {
+      const myHistory = await clinicalRecordsService.getMyHistory();
+      const reports = myHistory.map(mapClinicalRecordToReport);
+      console.log('✅ REPORTS - Fetched', reports.length, 'reports');
+      return reports;
+    } catch (error) {
+      console.error('❌ REPORTS - Error fetching:', error);
+      return [];
     }
+  },
+
+  getById: async (id: number): Promise<Report | undefined> => {
+    console.log('🔍 REPORTS - Fetching report:', id);
+    try {
+      const record = await clinicalRecordsService.getById(id);
+      return mapClinicalRecordToReport(record);
+    } catch (error) {
+      console.error('❌ REPORTS - Error fetching by id:', error);
+      return undefined;
+    }
+  },
+
+  getByType: async (type: 'emergency' | 'consultation' | 'followup'): Promise<Report[]> => {
+    console.log('📋 REPORTS - Fetching by type:', type);
+    try {
+      const allReports = await reportsService.getAll();
+      return allReports.filter(r => r.type === type);
+    } catch (error) {
+      console.error('❌ REPORTS - Error fetching by type:', error);
+      return [];
+    }
+  },
+
+  getDrafts: async (): Promise<Report[]> => {
+    console.log('📋 REPORTS - Fetching drafts');
+    try {
+      // Clinical records don't have draft status
+      return [];
+    } catch (error) {
+      console.error('❌ REPORTS - Error fetching drafts:', error);
+      return [];
+    }
+  },
+
+  getStats: async () => {
+    console.log('📊 REPORTS - Fetching stats');
+    try {
+      const allReports = await reportsService.getAll();
+      const total = allReports.length;
+      const completed = allReports.filter(r => r.status === 'completed').length;
+      const drafts = 0; // No drafts in clinical records
+      const emergency = allReports.filter(r => r.type === 'emergency').length;
+      const consultation = allReports.filter(r => r.type === 'consultation').length;
+      const followup = allReports.filter(r => r.type === 'followup').length;
+
+      console.log('✅ REPORTS - Stats:', { total, emergency, consultation, followup });
+      return { total, completed, drafts, emergency, consultation, followup };
+    } catch (error) {
+      console.error('❌ REPORTS - Error fetching stats:', error);
+      return {
+        total: 0,
+        completed: 0,
+        drafts: 0,
+        emergency: 0,
+        consultation: 0,
+        followup: 0
+      };
+    }
+  }
 };
+
+

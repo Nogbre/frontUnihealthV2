@@ -1,13 +1,11 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './pages/Login';
-import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Patients from './pages/Patients';
 import Appointments from './pages/Appointments';
 import Alerts from './pages/Alerts';
 import Vitals from './pages/Vitals';
-import Landing from './pages/Landing';
 import Layout from './components/Layout';
 import KioskManagement from './pages/KioskManagement';
 import MedicineInventory from './pages/MedicineInventory';
@@ -35,9 +33,9 @@ const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<Landing />} />
+      <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
+      <Route path="/register" element={<Navigate to="/login" replace />} />
       <Route
         path="/dashboard/*"
         element={

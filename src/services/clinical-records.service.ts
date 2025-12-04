@@ -24,8 +24,8 @@ export interface ClinicalRecord {
 }
 
 export interface CreateClinicalRecordDto {
-  patientId: number;
-  noteTypeId: number;
+  patientId: string;
+  noteTypeId: string;
   note: string;
 }
 

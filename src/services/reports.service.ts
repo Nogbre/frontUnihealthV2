@@ -1,4 +1,5 @@
 import { clinicalRecordsService, ClinicalRecord } from './clinical-records.service';
+import { patientsService } from './patients.service';
 import { catalogsService } from './catalogs.service';
 
 export interface Report {
@@ -47,11 +48,30 @@ const mapClinicalRecordToReport = (record: ClinicalRecord): Report => {
 
 export const reportsService = {
   getAll: async (): Promise<Report[]> => {
-    console.log('📋 REPORTS - Fetching all reports via clinical records');
+    console.log('📋 REPORTS - Fetching all reports via patients records');
     try {
-      const myHistory = await clinicalRecordsService.getMyHistory();
-      const reports = myHistory.map(mapClinicalRecordToReport);
-      console.log('✅ REPORTS - Fetched', reports.length, 'reports');
+      // 1. Get all patients
+      const patients = await patientsService.getAll();
+      
+      // 2. Get records for each patient in parallel
+      const recordsPromises = patients.map(patient => 
+        clinicalRecordsService.getByPatient(patient.id)
+          .catch(err => {
+            console.error(`Failed to fetch records for patient ${patient.id}`, err);
+            return [] as ClinicalRecord[];
+          })
+      );
+      
+      const recordsArrays = await Promise.all(recordsPromises);
+      
+      // 3. Flatten and map
+      const allRecords = recordsArrays.flat();
+      const reports = allRecords.map(mapClinicalRecordToReport);
+      
+      // Sort by date descending
+      reports.sort((a, b) => new Date(`${b.date}T${b.time}`).getTime() - new Date(`${a.date}T${a.time}`).getTime());
+
+      console.log('✅ REPORTS - Fetched', reports.length, 'reports from', patients.length, 'patients');
       return reports;
     } catch (error) {
       console.error('❌ REPORTS - Error fetching:', error);
@@ -62,7 +82,7 @@ export const reportsService = {
   getById: async (id: number): Promise<Report | undefined> => {
     console.log('🔍 REPORTS - Fetching report:', id);
     try {
-      const record = await clinicalRecordsService.getById(id);
+      const record = await clinicalRecordsService.getById(id.toString());
       return mapClinicalRecordToReport(record);
     } catch (error) {
       console.error('❌ REPORTS - Error fetching by id:', error);

@@ -42,7 +42,7 @@ export const clinicalRecordsService = {
     }
   },
 
-  async getByPatient(patientId: number): Promise<ClinicalRecord[]> {
+  async getByPatient(patientId: string): Promise<ClinicalRecord[]> {
     console.log('📋 CLINICAL RECORDS - Fetching for patient:', patientId);
     try {
       const response = await apiService.get<ClinicalRecord[]>(`/records/patient/${patientId}`);
@@ -66,7 +66,7 @@ export const clinicalRecordsService = {
     }
   },
 
-  async getById(id: number): Promise<ClinicalRecord> {
+  async getById(id: string): Promise<ClinicalRecord> {
     console.log('🔍 CLINICAL RECORDS - Fetching by id:', id);
     try {
       const response = await apiService.get<ClinicalRecord>(`/records/${id}`);

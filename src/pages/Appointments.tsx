@@ -122,7 +122,7 @@ const Appointments = () => {
     }
   };
 
-  const timeSlots = Array.from({ length: 13 }, (_, i) => i + 8); // 8:00 to 20:00
+  const timeSlots = Array.from({ length: 24 }, (_, i) => i); // 0:00 to 23:00 (24 hours)
 
   if (loading) {
     return (
@@ -243,54 +243,68 @@ const Appointments = () => {
                   <p className="text-gray-500">No hay citas programadas para este día</p>
                 </div>
               ) : (
-                filteredAppointments.map((apt) => {
+                filteredAppointments.map((apt, index) => {
                   const startTime = new Date(apt.start);
                   const hour = startTime.getHours();
                   const minute = startTime.getMinutes();
-                  const topPosition = ((hour - 8) * 96) + (minute / 60 * 96);
+                  const topPosition = (hour * 96) + (minute / 60 * 96);
+                  
+                  // Calculate horizontal offset for overlapping appointments
+                  const overlapOffset = index * 10; // Slight cascade effect
 
                   return (
                     <div
                       key={apt.id}
-                      className="absolute left-0 right-0 ml-2 mr-2"
-                      style={{ top: `${topPosition}px` }}
+                      className="absolute"
+                      style={{ 
+                        top: `${topPosition}px`,
+                        left: `${8 + overlapOffset}px`,
+                        right: `${8 + (filteredAppointments.length - index - 1) * 10}px`,
+                        zIndex: index + 1
+                      }}
                     >
-                      <div className="bg-white border-2 border-primary-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
-                        <div className="flex items-start gap-3">
-                          {/* Avatar */}
-                          <div className="w-12 h-12 bg-primary-600 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0">
-                            {getPatientName(apt).charAt(0)}
-                          </div>
-
-                          {/* Info */}
-                          <div className="flex-1">
-                            <h3 className="font-semibold text-gray-900">{getPatientName(apt)}</h3>
-                            <p className="text-sm text-gray-600">
-                              {format(new Date(apt.start), 'HH:mm')}
-                              {apt.end && ` - ${format(new Date(apt.end), 'HH:mm')}`}
-                            </p>
-                            <p className="text-sm text-gray-500 mt-1">
-                              {apt.reason || apt.serviceType?.name || 'Consulta general'}
-                            </p>
-                            <span className={`${getStatusColor(apt.status)} text-white text-xs px-2 py-1 rounded-full font-medium inline-block mt-2`}>
-                              {getStatusText(apt.status)}
-                            </span>
+                      <div className="bg-white border-l-4 border-l-primary-600 rounded-lg p-3 shadow-md hover:shadow-lg transition-all">
+                        <div className="flex items-center justify-between gap-3">
+                          {/* Avatar & Info */}
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <div className="w-10 h-10 bg-primary-600 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0 text-sm">
+                              {getPatientName(apt).charAt(0).toUpperCase()}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <h3 className="font-semibold text-gray-900 text-sm truncate">{getPatientName(apt)}</h3>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <p className="text-xs text-gray-600 font-medium">
+                                  {format(new Date(apt.start), 'HH:mm')}
+                                  {apt.end && ` - ${format(new Date(apt.end), 'HH:mm')}`}
+                                </p>
+                                <span className={`${getStatusColor(apt.status)} text-white text-xs px-2 py-0.5 rounded-full font-medium`}>
+                                  {getStatusText(apt.status)}
+                                </span>
+                              </div>
+                              <p className="text-xs text-gray-500 mt-1 truncate">
+                                {apt.reason || apt.serviceType?.name || 'Consulta general'}
+                              </p>
+                            </div>
                           </div>
 
                           {/* Actions */}
-                          <div className="flex flex-col gap-2">
+                          <div className="flex gap-1 flex-shrink-0">
                             <button
                               onClick={() => handleViewDetails(apt)}
-                              className="px-3 py-1 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 transition-colors"
+                              className="p-2 bg-primary-600 text-white text-xs rounded-lg hover:bg-primary-700 transition-colors"
+                              title="Ver detalles"
                             >
-                              Ver Detalles
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                              </svg>
                             </button>
                             <button
                               onClick={() => handleDeleteAppointment(apt)}
-                              className="px-3 py-1 border border-red-600 text-red-600 text-sm rounded-lg hover:bg-red-50 transition-colors flex items-center gap-1"
+                              className="p-2 border border-red-600 text-red-600 text-xs rounded-lg hover:bg-red-50 transition-colors"
+                              title="Eliminar"
                             >
-                              <Trash2 size={14} />
-                              Eliminar
+                              <Trash2 size={16} />
                             </button>
                           </div>
                         </div>
@@ -390,12 +404,18 @@ const Appointments = () => {
 
                       {/* Actions */}
                       <div className="flex flex-col gap-2">
-                        <button className="px-4 py-2 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 transition-colors">
+                        <button 
+                          onClick={() => handleViewDetails(apt)}
+                          className="px-4 py-2 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 transition-colors"
+                        >
                           Ver Detalles
                         </button>
-                        <button className="px-4 py-2 border border-primary-600 text-primary-600 text-sm rounded-lg hover:bg-primary-50 transition-colors flex items-center gap-2">
-                          <MessageSquare size={16} />
-                          Mensaje
+                        <button 
+                          onClick={() => handleDeleteAppointment(apt)}
+                          className="px-4 py-2 border border-red-600 text-red-600 text-sm rounded-lg hover:bg-red-50 transition-colors flex items-center justify-center gap-2"
+                        >
+                          <Trash2 size={16} />
+                          Eliminar
                         </button>
                       </div>
                     </div>

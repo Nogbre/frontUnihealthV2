@@ -27,16 +27,34 @@ const mapNoteTypeToReportType = (noteTypeId: string): 'emergency' | 'consultatio
   }
 };
 
-// Map clinical record to report
-const mapClinicalRecordToReport = (record: ClinicalRecord): Report => {
+// Map clinical record to report - now with eager patient data loading
+const mapClinicalRecordToReport = async (record: ClinicalRecord): Promise<Report> => {
   const createdDate = new Date(record.createdAt);
+  
+  // Try to get patient name from the record first
+  let patientName = 'Paciente desconocido';
+  
+  if (record.patient?.patientProfile) {
+    patientName = `${record.patient.patientProfile.firstName} ${record.patient.patientProfile.lastName}`;
+  } else if (record.patientId) {
+    // If patient info is not in the record, fetch it separately
+    try {
+      const patient = await patientsService.getById(parseInt(record.patientId));
+      if (patient.patientProfile) {
+        patientName = `${patient.patientProfile.firstName} ${patient.patientProfile.lastName}`;
+      } else if (patient.email) {
+        patientName = patient.email;
+      }
+    } catch (error) {
+      console.warn(`Could not fetch patient ${record.patientId}:`, error);
+      patientName = record.patient?.email || 'Paciente desconocido';
+    }
+  }
   
   return {
     id: parseInt(record.id),
     type: mapNoteTypeToReportType(record.noteTypeId),
-    patientName: record.patient?.patientProfile 
-      ? `${record.patient.patientProfile.firstName} ${record.patient.patientProfile.lastName}`
-      : record.patient?.email || 'Paciente desconocido',
+    patientName,
     patientId: parseInt(record.patientId),
     date: createdDate.toISOString().split('T')[0],
     time: createdDate.toTimeString().slice(0, 5),
@@ -64,9 +82,10 @@ export const reportsService = {
       
       const recordsArrays = await Promise.all(recordsPromises);
       
-      // 3. Flatten and map
+      // 3. Flatten and map with patient data
       const allRecords = recordsArrays.flat();
-      const reports = allRecords.map(mapClinicalRecordToReport);
+      const reportsPromises = allRecords.map(record => mapClinicalRecordToReport(record));
+      const reports = await Promise.all(reportsPromises);
       
       // Sort by date descending
       reports.sort((a, b) => new Date(`${b.date}T${b.time}`).getTime() - new Date(`${a.date}T${a.time}`).getTime());
@@ -83,7 +102,7 @@ export const reportsService = {
     console.log('🔍 REPORTS - Fetching report:', id);
     try {
       const record = await clinicalRecordsService.getById(id.toString());
-      return mapClinicalRecordToReport(record);
+      return await mapClinicalRecordToReport(record);
     } catch (error) {
       console.error('❌ REPORTS - Error fetching by id:', error);
       return undefined;

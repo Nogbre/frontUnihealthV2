@@ -16,6 +16,16 @@ export interface AuthResponse {
   id: number;
   email: string;
   role: string;
+  doctorProfile?: {
+    firstName: string;
+    lastName: string;
+    specialization: string;
+  };
+  nurseProfile?: {
+    firstName: string;
+    lastName: string;
+    specialization: string;
+  };
 }
 
 export const authService = {

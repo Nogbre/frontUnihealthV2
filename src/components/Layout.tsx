@@ -20,6 +20,9 @@ import { useState, useEffect } from 'react';
 import { alertsService } from '../services/alerts.service';
 import { appointmentsService } from '../services/appointments.service';
 import { isToday } from 'date-fns';
+import { notificationsService, Notification } from '../services/notifications.service';
+import { formatDistanceToNow } from 'date-fns';
+import { es } from 'date-fns/locale';
 
 const Layout = () => {
   const { logout, user } = useAuth();
@@ -29,9 +32,12 @@ const Layout = () => {
   const [alertsCount, setAlertsCount] = useState(0);
   const [appointmentsCount, setAppointmentsCount] = useState(0);
   const [kioskMenuOpen, setKioskMenuOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
 
   useEffect(() => {
     fetchCounts();
+    fetchNotifications();
   }, []);
 
   useEffect(() => {
@@ -57,6 +63,54 @@ const Layout = () => {
       console.error('Error fetching counts:', error);
     }
   };
+
+  const fetchNotifications = async () => {
+    try {
+      const data = await notificationsService.getAll();
+      setNotifications(data);
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+    }
+  };
+
+  const handleNotificationClick = async (notification: Notification) => {
+    // Mark as read
+    if (!notification.read) {
+      await notificationsService.markAsRead(notification.id);
+      await fetchNotifications();
+    }
+
+    // Navigate to related item
+    if (notification.relatedType === 'appointment') {
+      navigate('/dashboard/appointments');
+    } else if (notification.relatedType === 'alert') {
+      navigate('/dashboard/alerts');
+    } else if (notification.relatedType === 'report') {
+      navigate('/dashboard/reports');
+    }
+
+    setNotificationsOpen(false);
+  };
+
+  const handleMarkAllAsRead = async () => {
+    await notificationsService.markAllAsRead();
+    await fetchNotifications();
+  };
+
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case 'error':
+        return '🚨';
+      case 'warning':
+        return '⚠️';
+      case 'success':
+        return '✅';
+      default:
+        return 'ℹ️';
+    }
+  };
+
+  const unreadCount = notifications.filter(n => !n.read).length;
 
   const handleLogout = () => {
     logout();
@@ -228,19 +282,109 @@ const Layout = () => {
 
             {/* User info and notifications */}
             <div className="flex items-center space-x-4">
+              {/* Notifications Dropdown */}
               <div className="relative">
-                <Bell className="text-gray-600 hover:text-gray-800 cursor-pointer" size={24} />
-                <span className="absolute -top-1 -right-1 bg-primary-600 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
-                  2
-                </span>
+                <button
+                  onClick={() => setNotificationsOpen(!notificationsOpen)}
+                  className="relative"
+                >
+                  <Bell className="text-gray-600 hover:text-gray-800 cursor-pointer" size={24} />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-primary-600 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
+                      {unreadCount}
+                    </span>
+                  )}
+                </button>
+
+                {/* Notifications Dropdown Panel */}
+                {notificationsOpen && (
+                  <>
+                    {/* Backdrop */}
+                    <div
+                      className="fixed inset-0 z-10"
+                      onClick={() => setNotificationsOpen(false)}
+                    />
+                    
+                    {/* Dropdown */}
+                    <div className="absolute right-0 mt-2 w-96 bg-white rounded-lg shadow-xl border border-gray-200 z-20 max-h-[32rem] overflow-hidden flex flex-col">
+                      {/* Header */}
+                      <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                        <h3 className="text-lg font-semibold text-gray-900">Notificaciones</h3>
+                        {unreadCount > 0 && (
+                          <button
+                            onClick={handleMarkAllAsRead}
+                            className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+                          >
+                            Marcar todas leídas
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Notifications List */}
+                      <div className="overflow-y-auto flex-1">
+                        {notifications.length === 0 ? (
+                          <div className="text-center py-8 text-gray-500">
+                            <Bell size={48} className="mx-auto mb-2 text-gray-300" />
+                            <p>No tienes notificaciones</p>
+                          </div>
+                        ) : (
+                          notifications.map((notification) => (
+                            <button
+                              key={notification.id}
+                              onClick={() => handleNotificationClick(notification)}
+                              className={`w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors border-b border-gray-100 ${
+                                !notification.read ? 'bg-primary-50' : ''
+                              }`}
+                            >
+                              <div className="flex gap-3">
+                                <div className="text-2xl flex-shrink-0">
+                                  {getNotificationIcon(notification.type)}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <h4 className={`text-sm font-medium text-gray-900 ${
+                                      !notification.read ? 'font-semibold' : ''
+                                    }`}>
+                                      {notification.title}
+                                    </h4>
+                                    {!notification.read && (
+                                      <div className="w-2 h-2 bg-primary-600 rounded-full flex-shrink-0 mt-1"></div>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-gray-600 mt-1 line-clamp-2">
+                                    {notification.message}
+                                  </p>
+                                  <p className="text-xs text-gray-400 mt-1">
+                                    {formatDistanceToNow(new Date(notification.createdAt), {
+                                      addSuffix: true,
+                                      locale: es
+                                    })}
+                                  </p>
+                                </div>
+                              </div>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
               <div className="hidden sm:flex items-center space-x-3">
                 <div className="w-10 h-10 bg-primary-600 rounded-full flex items-center justify-center text-white font-bold">
                   {user?.email?.charAt(0).toUpperCase() || 'D'}
                 </div>
                 <div>
-                  <div className="text-sm font-medium text-gray-900">Dr. Roberto Fernández</div>
-                  <div className="text-xs text-gray-500">Médico General</div>
+                  <div className="text-sm font-medium text-gray-900">
+                    {user?.doctorProfile 
+                      ? `Dr. ${user.doctorProfile.firstName} ${user.doctorProfile.lastName}`
+                      : user?.nurseProfile
+                      ? `${user.nurseProfile.firstName} ${user.nurseProfile.lastName}`
+                      : user?.email || 'Usuario'}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {user?.doctorProfile?.specialization || user?.nurseProfile?.specialization || 'Médico'}
+                  </div>
                 </div>
               </div>
             </div>

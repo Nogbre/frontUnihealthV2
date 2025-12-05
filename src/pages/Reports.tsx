@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, Stethoscope, ClipboardList, Calendar, Download, Eye, Edit, FileText, Plus } from 'lucide-react';
+import { AlertTriangle, Stethoscope, ClipboardList, Calendar, Download, Eye, Edit, FileText, Plus, X, User, Clock, FileCheck } from 'lucide-react';
 import { reportsService, Report } from '../services/reports.service';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { generateMedicalReportPDF } from '../utils/pdfGenerator';
+import { parseReportContent } from '../utils/reportParser';
 
 const Reports = () => {
     const navigate = useNavigate();
@@ -12,6 +14,8 @@ const Reports = () => {
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'all' | 'emergency' | 'consultation' | 'drafts'>('all');
     const [stats, setStats] = useState({ total: 0, completed: 0, drafts: 0, emergency: 0, consultation: 0, followup: 0 });
+    const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+    const [showViewModal, setShowViewModal] = useState(false);
 
     useEffect(() => {
         fetchData();
@@ -87,6 +91,28 @@ const Reports = () => {
                 {badge.text}
             </span>
         );
+    };
+
+    const handleViewReport = async (reportId: number) => {
+        try {
+            const report = await reportsService.getById(reportId);
+            if (report) {
+                setSelectedReport(report);
+                setShowViewModal(true);
+            }
+        } catch (error) {
+            console.error('Error loading report:', error);
+            alert('Error al cargar el reporte');
+        }
+    };
+
+    const handleDownloadPDF = (report: Report) => {
+        try {
+            generateMedicalReportPDF(report);
+        } catch (error) {
+            console.error('Error generating PDF:', error);
+            alert('Error al generar el PDF. Por favor intenta de nuevo.');
+        }
     };
 
     if (loading) {
@@ -267,7 +293,10 @@ const Reports = () => {
                                     </td>
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-3">
-                                            <button className="text-primary-600 hover:text-primary-700 flex items-center gap-1 text-sm">
+                                            <button 
+                                                onClick={() => handleViewReport(report.id)}
+                                                className="text-primary-600 hover:text-primary-700 flex items-center gap-1 text-sm"
+                                            >
                                                 <Eye size={16} />
                                                 Ver
                                             </button>
@@ -277,7 +306,10 @@ const Reports = () => {
                                                     Editar
                                                 </button>
                                             )}
-                                            <button className="text-gray-600 hover:text-gray-700 flex items-center gap-1 text-sm">
+                                            <button 
+                                                onClick={() => handleDownloadPDF(report)}
+                                                className="text-gray-600 hover:text-gray-700 flex items-center gap-1 text-sm"
+                                            >
                                                 <FileText size={16} />
                                                 PDF
                                             </button>
@@ -289,6 +321,142 @@ const Reports = () => {
                     </table>
                 </div>
             </div>
+
+            {/* View Report Modal */}
+            {showViewModal && selectedReport && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+                        {/* Modal Header - Medical Institution Style */}
+                        <div className="sticky top-0 bg-gradient-to-r from-primary-600 to-primary-700 text-white px-6 py-5 rounded-t-2xl">
+                            <div className="flex items-start justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center">
+                                        <span className="text-2xl">❤️</span>
+                                    </div>
+                                    <div>
+                                        <h2 className="text-2xl font-bold">UNIHealth</h2>
+                                        <p className="text-primary-100 text-sm">Sistema de Gestión Médica</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setShowViewModal(false)}
+                                    className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-2 transition-colors"
+                                >
+                                    <X size={24} />
+                                </button>
+                            </div>
+                            
+                            {/* Report Type Badge */}
+                            <div className="mt-4 flex items-center gap-3">
+                                {getTypeIcon(selectedReport.type)}
+                                <div>
+                                    <h3 className="text-xl font-semibold">{getTypeLabel(selectedReport.type)}</h3>
+                                    <p className="text-primary-100 text-sm flex items-center gap-2 mt-1">
+                                        <Clock size={14} />
+                                        {format(new Date(`${selectedReport.date}T${selectedReport.time}`), "EEEE, d 'de' MMMM 'de' yyyy • HH:mm", { locale: es })}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Modal Content */}
+                        <div className="px-6 py-6 space-y-6">
+                            {/* Patient Information Card */}
+                            <div className="border-l-4 border-primary-600 bg-primary-50 rounded-r-lg p-5">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <User className="text-primary-600" size={20} />
+                                    <h4 className="font-bold text-primary-900 uppercase text-sm tracking-wide">Información del Paciente</h4>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <p className="text-xs font-medium text-primary-700 uppercase tracking-wide mb-1">Nombre Completo</p>
+                                        <p className="text-base font-semibold text-gray-900">{selectedReport.patientName}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-medium text-primary-700 uppercase tracking-wide mb-1">Estado del Reporte</p>
+                                        <div className="mt-1">
+                                            {getStatusBadge(selectedReport.status)}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Report Content - Parsed Sections */}
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <FileCheck className="text-gray-600" size={20} />
+                                    <h4 className="font-bold text-gray-900 uppercase text-sm tracking-wide">Contenido Clínico</h4>
+                                </div>
+                                
+                                {selectedReport.content ? (
+                                    (() => {
+                                        const parsed = parseReportContent(selectedReport.content);
+                                        return (
+                                            <div className="space-y-4">
+                                                {parsed.sections.map((section, index) => (
+                                                    <div key={index} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                                                        <h5 className="font-semibold text-primary-700 text-sm uppercase tracking-wide mb-2 flex items-center gap-2">
+                                                            <div className="w-1.5 h-1.5 bg-primary-600 rounded-full"></div>
+                                                            {section.title}
+                                                        </h5>
+                                                        <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                                                            {section.content}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        );
+                                    })()
+                                ) : (
+                                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center">
+                                        <p className="text-yellow-800 text-sm">No hay contenido disponible para este reporte</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Medical Professional Signature */}
+                            <div className="border-t-2 border-gray-200 pt-4 mt-6">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Médico Responsable</p>
+                                        <p className="text-base font-semibold text-gray-900 mt-1">{selectedReport.createdBy}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Documento Generado</p>
+                                        <p className="text-sm text-gray-700 mt-1">
+                                            {format(new Date(), "dd/MM/yyyy • HH:mm", { locale: es })}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Medical Confidentiality Notice */}
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                <p className="text-xs text-blue-800 text-center">
+                                    🔒 Este documento contiene información médica confidencial protegida por la ley de privacidad del paciente
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="sticky bottom-0 bg-gray-100 border-t border-gray-200 px-6 py-4 flex gap-3 justify-end rounded-b-2xl">
+                            <button
+                                onClick={() => setShowViewModal(false)}
+                                className="px-5 py-2.5 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+                            >
+                                Cerrar
+                            </button>
+                            <button
+                                onClick={() => handleDownloadPDF(selectedReport)}
+                                className="px-5 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium flex items-center gap-2 shadow-md hover:shadow-lg"
+                            >
+                                <Download size={18} />
+                                Descargar PDF Profesional
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
